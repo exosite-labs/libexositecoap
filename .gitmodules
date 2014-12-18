@@ -1,0 +1,3 @@
+[submodule "picocoap"]
+	path = picocoap
+	url = https://github.com/exosite-garage/PicoCoAP
