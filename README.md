@@ -1,4 +1,4 @@
-** NOTICE: This library is not finished, do not depend on it for anything, it
+**NOTICE: This library is not finished, do not depend on it for anything, it
 will have potentially significant bugs.**
 
 # libexositecoap
