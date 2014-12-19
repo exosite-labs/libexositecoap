@@ -66,14 +66,13 @@ int main(void)
     
     while(1)
     {
-        printf(" ------ Loop ------ \n");
+        if (loopcount % 100 == 0){
+            // prepare data to write
+            snprintf(loop_str, 15, "%llu", loopcount);
 
-        // prepare data to write
-        snprintf(loop_str, 15, "%llu", loopcount++);
-        snprintf(error_str, 15, "%llu", errorcount);
-
-        // queue read and write operations
-        //exo_write(&ops[1], "uptime", loop_str);
+            // queue write operation
+            exo_write(&ops[1], "uptime", loop_str);
+        }
 
         // perform queued operations until all are done or failed
         while(exo_operate(ops, op_count) != EXO_IDLE);
@@ -92,13 +91,18 @@ int main(void)
                 } else {
                     printf("[ERROR] on '%s'\n", ops[i].alias);
                     printf("        error count is now %llu\n", errorcount);
+
+                    // queue a write to error count next time
+                    snprintf(error_str, 15, "%llu", errorcount);
+                    exo_write(&ops[3], "errorcount", error_str);
                 }
 
                 exo_op_done(&ops[i]);
             }
         }
 
-        sleep(1);
+        usleep(100000);
+        loopcount++;
     }
     return 0;
 }
