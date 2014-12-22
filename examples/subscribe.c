@@ -34,8 +34,8 @@
 
 #include <string.h>
 #include <stdio.h>
-#include <unistd.h>
-#include <exosite.h>
+#include <time.h>
+#include "exosite.h"
 
 const char VENDOR[] = "patrick";
 const char MODEL[] =  "generic_test";
@@ -101,7 +101,7 @@ int main(void)
             }
         }
 
-        usleep(100000);
+        nanosleep((struct timespec[]){{0, 500000000}}, NULL);
         loopcount++;
     }
     return 0;

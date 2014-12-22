@@ -38,7 +38,7 @@ posixclient:
 	             src/exosite.c \
 	             pal/posix/exosite_pal.c \
 	             picocoap/picocoap.o \
-	    -D_POSIX_SOURCE \
+	    -D_POSIX_C_SOURCE=200112L \
 	    -Isrc \
 	    -Ipal/posix \
 	    -Ipicocoap/src \
@@ -49,7 +49,7 @@ posixsubscribe:
 	             src/exosite.c \
 	             pal/posix/exosite_pal.c \
 	             picocoap/picocoap.o \
-	    -D_POSIX_SOURCE \
+	    -D_POSIX_C_SOURCE=200112L \
 	    -Isrc \
 	    -Ipal/posix \
 	    -Ipicocoap/src \
