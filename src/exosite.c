@@ -177,6 +177,7 @@ void exo_op_init(exo_op *op)
   op->value = NULL;
   op->value_max = 0;
   op->mid = 0;
+  op->obs_seq = 0;
 }
 
 void exo_op_done(exo_op *op)
@@ -275,6 +276,7 @@ exo_state exo_operate(exo_op *op, uint8_t count)
                 memcpy(op[i].value, payload.val, payload.len);
                 op[i].value[payload.len] = 0;
                 op[i].state = EXO_REQUEST_SUCCESS;
+                op[i].timeout = exopal_get_time() + 120000000 + (rand() % 15 * 100000);
               }
               break;
             case EXO_WRITE:
@@ -359,6 +361,7 @@ exo_state exo_operate(exo_op *op, uint8_t count)
         }
 
         break;
+      case EXO_REQUEST_SUBSCRIBED:
       case EXO_REQUEST_PENDING:
         // check if pending requests have reached timeout
         if (op[i].timeout <= now){
@@ -389,7 +392,7 @@ exo_state exo_operate(exo_op *op, uint8_t count)
             op[i].state = EXO_REQUEST_SUCCESS;
 
           // TODO: this should get set to Max-Age value, hard coding 120 s
-          op[i].timeout = exopal_get_time() + 120000000 + (rand() % 15);
+          op[i].timeout = exopal_get_time() + 120000000 + (rand() % 15 * 100000);
         }
         break;
       default:
