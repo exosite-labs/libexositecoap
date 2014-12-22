@@ -38,9 +38,10 @@ posixclient:
 	             src/exosite.c \
 	             pal/posix/exosite_pal.c \
 	             picocoap/picocoap.o \
-	    -I./src \
-	    -I./pal/posix \
-	    -I./picocoap/src \
+	    -D_POSIX_SOURCE \
+	    -Isrc \
+	    -Ipal/posix \
+	    -Ipicocoap/src \
 	    -o posixclient
 
 posixsubscribe: 
@@ -48,9 +49,10 @@ posixsubscribe:
 	             src/exosite.c \
 	             pal/posix/exosite_pal.c \
 	             picocoap/picocoap.o \
-	    -I./src \
-	    -I./pal/posix \
-	    -I./picocoap/src \
+	    -D_POSIX_SOURCE \
+	    -Isrc \
+	    -Ipal/posix \
+	    -Ipicocoap/src \
 	    -o posixsubscribe
 
 #posixclientd: examples/posix/client_dtls.c src/coap.h
@@ -59,3 +61,4 @@ posixsubscribe:
 clean:
 	rm -f test
 	rm -f posixclient
+	rm -f posixsubscribe
