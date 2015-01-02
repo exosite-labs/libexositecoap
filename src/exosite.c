@@ -320,7 +320,7 @@ static void exo_process_waiting_datagrams(exo_op *op, uint8_t count)
           if (coap_get_code_class(&pdu) == 2) {
             payload = coap_get_payload(&pdu);
             if (payload.len == 0) {
-              op[i].value = 0;
+              op[i].value[0] = '\0';
             } else if (payload.len+1 > op[i].value_max || op[i].value == 0) {
               op[i].state = EXO_REQUEST_ERROR;
             } else{
@@ -341,7 +341,7 @@ static void exo_process_waiting_datagrams(exo_op *op, uint8_t count)
           if (coap_get_code_class(&pdu) == 2) {
             payload = coap_get_payload(&pdu);
             if (payload.len == 0) {
-              op[i].value = 0;
+              op[i].value[0] = '\0';
             } else if (payload.len+1 > op[i].value_max || op[i].value == 0) {
               op[i].state = EXO_REQUEST_ERROR;
             } else{
@@ -367,7 +367,7 @@ static void exo_process_waiting_datagrams(exo_op *op, uint8_t count)
 
           payload = coap_get_payload(&pdu);
           if (payload.len == 0) {
-            op[i].value = 0;
+            op[i].value[0] = '\0';
           } else if (payload.len+1 > op[i].value_max || op[i].value == 0) {
             op[i].state = EXO_REQUEST_ERROR;
           } else{
