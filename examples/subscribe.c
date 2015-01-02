@@ -52,7 +52,7 @@ int main(void)
     char read_str[32];
     char loop_str[16];
     char error_str[16];
-    const uint8_t op_count = 3;
+    const uint8_t op_count = 4;
     exo_op ops[op_count];
 
     exo_init(VENDOR, MODEL, SERIAL);
@@ -62,7 +62,7 @@ int main(void)
     }
 
     // only need to setup subscribe once
-    exo_subscribe(&ops[0], "command", read_str, 32);
+    exo_subscribe(&ops[1], "command", read_str, 32);
     
     while(1)
     {
@@ -71,14 +71,14 @@ int main(void)
             snprintf(loop_str, 15, "%llu", loopcount);
 
             // queue write operation
-            exo_write(&ops[1], "uptime", loop_str);
+            exo_write(&ops[2], "uptime", loop_str);
         }
 
         // perform queued operations until all are done or failed
         while(exo_operate(ops, op_count) != EXO_IDLE);
 
         // check if ops succeeded or failed
-        for (int i = 0; i < op_count; i++){
+        for (int i = 1; i < op_count; i++){
             if (exo_is_op_finished(&ops[i])) {
                 if (exo_is_op_success(&ops[i])) {
                     if (exo_is_op_read(&ops[i]) || exo_is_op_subscribe(&ops[i])) {

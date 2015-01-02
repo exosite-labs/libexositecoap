@@ -58,7 +58,7 @@ typedef enum exo_state
 	EXO_WAITING,
 	EXO_BUSY,
 	EXO_NEW_RESPONSE,
-	EXO_R_W_ERROR,
+	EXO_ERROR,
 	EXO_CONNECTION_ERROR,
 	EXO_DEVICE_NOT_ENABLED,
 	EXO_DEVICE_DOES_NOT_EXIST,
@@ -75,10 +75,8 @@ typedef enum exo_device_state
 {
   EXO_STATE_UNINITIALIZED,
   EXO_STATE_INITIALIZED,
-  EXO_STATE_FATAL_ERROR,
   EXO_STATE_GOOD,
-  EXO_STATE_NOT_ACTIVATED,
-  EXO_STATE_CAN_NOT_ACTIVATE,
+  EXO_STATE_BAD_CIK,
 } exo_device_state;
 
 typedef enum exo_request_type
@@ -87,6 +85,7 @@ typedef enum exo_request_type
   EXO_WRITE,
   EXO_READ,
   EXO_SUBSCRIBE,
+  EXO_ACTIVATE,
 } exo_request_type;
 
 typedef enum exo_request_state

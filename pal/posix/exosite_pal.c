@@ -177,12 +177,15 @@ uint8_t exopal_store_cik(const char *cik)
 	file = fopen("cik", "w");
 
 	if (file == NULL)
-		return 1;
+		return 2;
 	
 	bytes_written = fwrite(cik, sizeof(char), 40, file);
 
 	if (bytes_written != 40)
-		return 2;
+		return 1;
+
+
+	fclose(file);
 
 	return 0;
 }
@@ -202,12 +205,14 @@ uint8_t exopal_retrieve_cik(char *cik)
 	file = fopen("cik", "r");
 
 	if (file == NULL)
-		return 1;
+		return 2;
 	
 	bytes_read = fread(cik, sizeof(char), 40, file);
 
 	if (bytes_read != 40)
-		return 2;
+		return 1;
+
+	fclose(file);
 
 	return 0;
 }

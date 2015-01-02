@@ -169,6 +169,22 @@ void exo_subscribe(exo_op *op, const char * alias, char * value, const size_t va
   op->mid = 0;
 }
 
+/*!
+ * \brief  Activates the Device on the Platform
+ *
+ * Queues an activation request. Usually only used internally.
+ *
+ */
+void exo_activate(exo_op *op)
+{
+  op->type = EXO_ACTIVATE;
+  op->state = EXO_REQUEST_NEW;
+  op->alias = NULL;
+  op->value = NULL;
+  op->value_max = 0;
+  op->mid = 0;
+}
+
 void exo_op_init(exo_op *op)
 {
   op->type = EXO_NULL;
@@ -245,6 +261,17 @@ exo_state exo_operate(exo_op *op, uint8_t count)
   pdu.max = 576;
   pdu.len = 0;
 
+  switch (device_state){
+    case EXO_STATE_UNINITIALIZED:
+      return EXO_ERROR;
+    case EXO_STATE_INITIALIZED:
+    case EXO_STATE_BAD_CIK:
+      if (op[0].state == EXO_REQUEST_NULL && op[0].timeout < now)
+        exo_activate(&op[0]);
+    case EXO_STATE_GOOD:
+      break;
+  }
+
   // receive a UDP packet if one or more waiting
   while (exopal_udp_recv(pdu.buf, pdu.max, &pdu.len) == 0) {
     if (coap_validate_pkt(&pdu) != CE_NONE)
@@ -282,11 +309,28 @@ exo_state exo_operate(exo_op *op, uint8_t count)
             case EXO_WRITE:
               op[i].state = EXO_REQUEST_SUCCESS;
               break;
+            case EXO_ACTIVATE:
+              if (payload.len == CIK_LENGTH) {
+                memcpy(cik, payload.val, CIK_LENGTH);
+                cik[CIK_LENGTH] = 0;
+                op[i].state = EXO_REQUEST_SUCCESS;
+                exopal_store_cik(cik);
+                device_state = EXO_STATE_GOOD;
+              } else {
+                op[i].state = EXO_REQUEST_ERROR;
+              }
+              break;
+              break;
             default:
               break;
           }
+          device_state = EXO_STATE_GOOD;
         } else {
           op[i].state = EXO_REQUEST_ERROR;
+          if (coap_get_code(&pdu) == CC_UNAUTHORIZED){
+            device_state = EXO_STATE_BAD_CIK;
+            op[i].timeout = now + 10000000;
+          }
         }
         break;
       }else if (op[i].state == EXO_REQUEST_SUBSCRIBED && coap_get_token(&pdu) == op[i].token) {
@@ -347,6 +391,9 @@ exo_state exo_operate(exo_op *op, uint8_t count)
             break;
           case EXO_WRITE:
             exo_build_msg_write(&pdu, op[i].alias, op[i].value);
+            break;
+          case EXO_ACTIVATE:
+            exo_build_msg_activate(&pdu, vendor, model, serial);
             break;
           default:
             op[i].type = EXO_NULL;
@@ -527,13 +574,23 @@ exo_error exo_build_msg_ack(coap_pdu *pdu, const uint16_t mid)
     return EXO_OK;
 }
 
-uint8_t exo_validate_cik(const char *cik)
+exo_error exo_do_activate()
 {
-    uint8_t i;
+  exo_op op;
 
-    for (i = 0; i < CIK_LENGTH; i++) {
-        if (!((cik[i] >= 'a' && cik[i] <= 'f') ||
-              (cik[i] >= '0' && cik[i] <= '9'))) {
+  exo_op_init(&op);
+
+
+  return EXO_OK;
+}
+
+uint8_t exo_util_is_ascii_hex(const char *str, size_t len)
+{
+    size_t i;
+
+    for (i = 0; i < len; i++) {
+        if (!((str[i] >= 'a' && str[i] <= 'f') ||
+              (str[i] >= '0' && str[i] <= '9'))) {
             return 1;
         }
     }
