@@ -43,6 +43,9 @@
 #include <ctype.h>
 
 // Internal Functions
+
+static void exo_process_waiting_datagrams(exo_op *op, uint8_t count);
+static void exo_process_active_ops(exo_op *op, uint8_t count);
 exo_error exo_build_msg_activate(coap_pdu *pdu, const char *vendor, const char *model, const char *serial_number);
 exo_error exo_build_msg_read(coap_pdu *pdu, const char *alias);
 exo_error exo_build_msg_observe(coap_pdu *pdu, const char *alias);
@@ -251,6 +254,39 @@ uint8_t exo_is_op_write(exo_op *op)
  */
 exo_state exo_operate(exo_op *op, uint8_t count)
 {
+  int i;
+
+  switch (device_state){
+    case EXO_STATE_UNINITIALIZED:
+      return EXO_ERROR;
+    case EXO_STATE_INITIALIZED:
+    case EXO_STATE_BAD_CIK:
+      if (op[0].state == EXO_REQUEST_NULL && op[0].timeout == 0)
+        exo_activate(&op[0]);
+    case EXO_STATE_GOOD:
+      break;
+  }
+
+  exo_process_waiting_datagrams(op, count);
+  exo_process_active_ops(op, count);
+
+  for (i = 0; i < count; i++) {
+    if (op[i].state == EXO_REQUEST_NEW)
+      return EXO_BUSY;
+  }
+
+  for (i = 0; i < count; i++) {
+    if (op[i].state == EXO_REQUEST_PENDING)
+      return EXO_WAITING;
+  }
+
+  return EXO_IDLE;
+}
+
+// Internal Functions
+
+static void exo_process_waiting_datagrams(exo_op *op, uint8_t count)
+{
   uint8_t buf[576];
   coap_pdu pdu;
   coap_payload payload;
@@ -260,17 +296,6 @@ exo_state exo_operate(exo_op *op, uint8_t count)
   pdu.buf = buf;
   pdu.max = 576;
   pdu.len = 0;
-
-  switch (device_state){
-    case EXO_STATE_UNINITIALIZED:
-      return EXO_ERROR;
-    case EXO_STATE_INITIALIZED:
-    case EXO_STATE_BAD_CIK:
-      if (op[0].state == EXO_REQUEST_NULL && op[0].timeout < now)
-        exo_activate(&op[0]);
-    case EXO_STATE_GOOD:
-      break;
-  }
 
   // receive a UDP packet if one or more waiting
   while (exopal_udp_recv(pdu.buf, pdu.max, &pdu.len) == 0) {
@@ -363,6 +388,7 @@ exo_state exo_operate(exo_op *op, uint8_t count)
       }
     }
 
+    // if it gets here we don't recognize message, reply RST
     if (i == count){
       if (coap_get_type(&pdu) == CT_CON) {
         // this can't fail
@@ -376,8 +402,20 @@ exo_state exo_operate(exo_op *op, uint8_t count)
       break;
     }
   }
+}
 
-  // process all requests that need something done
+// process all ops that are in an active state
+static void exo_process_active_ops(exo_op *op, uint8_t count)
+{
+  uint8_t buf[576];
+  coap_pdu pdu;
+  int i;
+  uint64_t now = exopal_get_time();
+
+  pdu.buf = buf;
+  pdu.max = 576;
+  pdu.len = 0;
+
   for (i = 0; i < count; i++) {
     switch (op[i].state) {
       case EXO_REQUEST_NEW:
@@ -446,21 +484,8 @@ exo_state exo_operate(exo_op *op, uint8_t count)
         break;
     }
   }
-
-  for (i = 0; i < count; i++) {
-    if (op[i].state == EXO_REQUEST_NEW)
-      return EXO_BUSY;
-  }
-
-  for (i = 0; i < count; i++) {
-    if (op[i].state == EXO_REQUEST_PENDING)
-      return EXO_WAITING;
-  }
-
-  return EXO_IDLE;
 }
 
-// Internal Functions
 
 exo_error exo_build_msg_activate(coap_pdu *pdu, const char *vendor, const char *model, const char *serial_number)
 {
