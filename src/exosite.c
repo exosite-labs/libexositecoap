@@ -292,7 +292,6 @@ static void exo_process_waiting_datagrams(exo_op *op, uint8_t count)
   coap_pdu pdu;
   coap_payload payload;
   int i;
-  uint64_t now = exopal_get_time();
 
   pdu.buf = buf;
   pdu.max = 576;
