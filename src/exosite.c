@@ -306,10 +306,14 @@ static void exo_process_waiting_datagrams(exo_op *op, uint8_t count)
     for (i = 0; i < count; i++) {
       if(op[i].type == EXO_WRITE) {
         if (op[i].state == EXO_REQUEST_PENDING && op[i].mid == coap_get_mid(&pdu)) {
-          if (coap_get_code_class(&pdu) == 2)
+          if (coap_get_code_class(&pdu) == 2) {
             op[i].state = EXO_REQUEST_SUCCESS;
-          else
+          } else {
             op[i].state = EXO_REQUEST_ERROR;
+
+            if (coap_get_code(&pdu) == CC_UNAUTHORIZED)
+              device_state = EXO_STATE_BAD_CIK;
+          }
           break;
         }
       } else if(op[i].type == EXO_READ) {
