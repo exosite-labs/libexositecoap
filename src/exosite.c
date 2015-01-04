@@ -303,61 +303,8 @@ static void exo_process_waiting_datagrams(exo_op *op, uint8_t count)
       continue; //Invalid Packet, Ignore
 
     for (i = 0; i < count; i++) {
-      if(op[i].type == EXO_WRITE) {
-        if (op[i].state == EXO_REQUEST_PENDING && op[i].mid == coap_get_mid(&pdu)) {
-          if (coap_get_code_class(&pdu) == 2) {
-            op[i].state = EXO_REQUEST_SUCCESS;
-          } else {
-            op[i].state = EXO_REQUEST_ERROR;
-
-            if (coap_get_code(&pdu) == CC_UNAUTHORIZED)
-              device_state = EXO_STATE_BAD_CIK;
-          }
-          break;
-        }
-      } else if(op[i].type == EXO_READ) {
-        if (op[i].state == EXO_REQUEST_PENDING && op[i].mid == coap_get_mid(&pdu)) {
-          if (coap_get_code_class(&pdu) == 2) {
-            payload = coap_get_payload(&pdu);
-            if (payload.len == 0) {
-              op[i].value[0] = '\0';
-            } else if (payload.len+1 > op[i].value_max || op[i].value == 0) {
-              op[i].state = EXO_REQUEST_ERROR;
-            } else{
-              memcpy(op[i].value, payload.val, payload.len);
-              op[i].value[payload.len] = 0;
-              op[i].state = EXO_REQUEST_SUCCESS;
-            }
-          } else {
-            op[i].state = EXO_REQUEST_ERROR;
-
-            if (coap_get_code(&pdu) == CC_UNAUTHORIZED)
-              device_state = EXO_STATE_BAD_CIK;
-          }
-          break;
-        }
-      } else if(op[i].type == EXO_SUBSCRIBE) {
-        if (op[i].state == EXO_REQUEST_PENDING && op[i].mid == coap_get_mid(&pdu)) {
-          if (coap_get_code_class(&pdu) == 2) {
-            payload = coap_get_payload(&pdu);
-            if (payload.len == 0) {
-              op[i].value[0] = '\0';
-            } else if (payload.len+1 > op[i].value_max || op[i].value == 0) {
-              op[i].state = EXO_REQUEST_ERROR;
-            } else{
-              memcpy(op[i].value, payload.val, payload.len);
-              op[i].value[payload.len] = 0;
-              op[i].state = EXO_REQUEST_SUCCESS;
-              op[i].timeout = exopal_get_time() + 120000000 + (rand() % 15 * 100000);
-            }
-          } else {
-            op[i].state = EXO_REQUEST_ERROR;
-
-            if (coap_get_code(&pdu) == CC_UNAUTHORIZED)
-              device_state = EXO_STATE_BAD_CIK;
-          }
-          break;
-        }else if(op[i].state == EXO_REQUEST_SUBSCRIBED && coap_get_token(&pdu) == op[i].token) {
+      if (coap_get_type(&pdu) == CT_CON || coap_get_type(&pdu) == CT_NON) {
+        if(op[i].state == EXO_REQUEST_SUBSCRIBED && coap_get_token(&pdu) == op[i].token) {
           coap_option opt;
           uint32_t new_seq = 0;
           opt = coap_get_option_by_num(&pdu, CON_OBSERVE, 0);
@@ -384,27 +331,73 @@ static void exo_process_waiting_datagrams(exo_op *op, uint8_t count)
           }
           break;
         }
-      } else if(op[i].type == EXO_ACTIVATE) {
+      } else if (coap_get_type(&pdu) == CT_ACK) {
         if (op[i].state == EXO_REQUEST_PENDING && op[i].mid == coap_get_mid(&pdu)) {
           if (coap_get_code_class(&pdu) == 2) {
-            payload = coap_get_payload(&pdu);
-            if (payload.len == CIK_LENGTH) {
-              memcpy(cik, payload.val, CIK_LENGTH);
-              cik[CIK_LENGTH] = 0;
-              op[i].state = EXO_REQUEST_SUCCESS;
-              exopal_store_cik(cik);
-              device_state = EXO_STATE_GOOD;
-            } else {
-              op[i].state = EXO_REQUEST_ERROR;
+            switch (op[i].type) {
+              case EXO_WRITE:
+                op[i].state = EXO_REQUEST_SUCCESS;
+                break;
+              case EXO_READ:
+                payload = coap_get_payload(&pdu);
+                if (payload.len == 0) {
+                  op[i].value[0] = '\0';
+                } else if (payload.len+1 > op[i].value_max || op[i].value == 0) {
+                  op[i].state = EXO_REQUEST_ERROR;
+                } else{
+                  memcpy(op[i].value, payload.val, payload.len);
+                  op[i].value[payload.len] = 0;
+                  op[i].state = EXO_REQUEST_SUCCESS;
+                }
+                break;
+              case EXO_SUBSCRIBE:
+                payload = coap_get_payload(&pdu);
+                if (payload.len == 0) {
+                  op[i].value[0] = '\0';
+                } else if (payload.len+1 > op[i].value_max || op[i].value == 0) {
+                  op[i].state = EXO_REQUEST_ERROR;
+                } else{
+                  memcpy(op[i].value, payload.val, payload.len);
+                  op[i].value[payload.len] = 0;
+                  op[i].state = EXO_REQUEST_SUCCESS;
+                  op[i].timeout = exopal_get_time() + 120000000 + (rand() % 15 * 100000);
+                }
+                break;
+              case EXO_ACTIVATE:
+                payload = coap_get_payload(&pdu);
+                if (payload.len == CIK_LENGTH) {
+                  memcpy(cik, payload.val, CIK_LENGTH);
+                  cik[CIK_LENGTH] = 0;
+                  op[i].state = EXO_REQUEST_SUCCESS;
+                  exopal_store_cik(cik);
+                  device_state = EXO_STATE_GOOD;
+                } else {
+                  op[i].state = EXO_REQUEST_ERROR;
+                }
+
+                // We're done with this op now.
+                exo_op_init(&op[i]);
+                break;
+              case EXO_NULL: // pending null request? shouldn't be possible
+                continue;
             }
           } else {
-            // May or may not be an error, might just already be activated.
             op[i].state = EXO_REQUEST_ERROR;
-            device_state = EXO_STATE_GOOD;
+
+            if (coap_get_code(&pdu) == CC_UNAUTHORIZED){
+              device_state = EXO_STATE_BAD_CIK;
+            } else if (coap_get_code(&pdu) == CC_NOT_FOUND) {
+              device_state = EXO_STATE_GOOD;
+            }
           }
 
-          // We're done with this op now.
-          exo_op_init(&op[i]);
+          break;
+        }
+
+      } else if (coap_get_type(&pdu) == CT_RST) {
+        if ((op[i].state == EXO_REQUEST_PENDING || op[i].state == EXO_REQUEST_SUBSCRIBED) &&
+            (op[i].mid == coap_get_mid(&pdu) && op[i].token == coap_get_token(&pdu))){
+          op[i].state = EXO_REQUEST_ERROR;
           break;
         }
       }
