@@ -304,30 +304,34 @@ static void exo_process_waiting_datagrams(exo_op *op, uint8_t count)
 
     for (i = 0; i < count; i++) {
       if (coap_get_type(&pdu) == CT_CON || coap_get_type(&pdu) == CT_NON) {
-        if(op[i].state == EXO_REQUEST_SUBSCRIBED && coap_get_token(&pdu) == op[i].token) {
-          coap_option opt;
-          uint32_t new_seq = 0;
-          opt = coap_get_option_by_num(&pdu, CON_OBSERVE, 0);
-          for (int j = 0; j < opt.len; j++) {
-            new_seq = (new_seq << (8*j)) | opt.val[j];
-          }
-
-          payload = coap_get_payload(&pdu);
-          if (payload.len == 0) {
-            op[i].value[0] = '\0';
-          } else if (payload.len+1 > op[i].value_max || op[i].value == 0) {
-            op[i].state = EXO_REQUEST_ERROR;
-          } else{
-            memcpy(op[i].value, payload.val, payload.len);
-            op[i].value[payload.len] = 0;
-            op[i].mid = coap_get_mid(&pdu);
-            // TODO: User proper logic to ensure it's a new value not a different, but old one.
-            if (op[i].obs_seq != new_seq) {
-              op[i].state = EXO_REQUEST_SUB_ACK_NEW;
-              op[i].obs_seq = new_seq;
-            } else {
-              op[i].state = EXO_REQUEST_SUB_ACK;
+        if (op[i].state == EXO_REQUEST_SUBSCRIBED && coap_get_token(&pdu) == op[i].token) {
+          if (coap_get_code(&pdu) == CC_CONTENT) {
+            coap_option opt;
+            uint32_t new_seq = 0;
+            opt = coap_get_option_by_num(&pdu, CON_OBSERVE, 0);
+            for (int j = 0; j < opt.len; j++) {
+              new_seq = (new_seq << (8*j)) | opt.val[j];
             }
+
+            payload = coap_get_payload(&pdu);
+            if (payload.len == 0) {
+              op[i].value[0] = '\0';
+            } else if (payload.len+1 > op[i].value_max || op[i].value == 0) {
+              op[i].state = EXO_REQUEST_ERROR;
+            } else{
+              memcpy(op[i].value, payload.val, payload.len);
+              op[i].value[payload.len] = 0;
+              op[i].mid = coap_get_mid(&pdu);
+              // TODO: User proper logic to ensure it's a new value not a different, but old one.
+              if (op[i].obs_seq != new_seq) {
+                op[i].state = EXO_REQUEST_SUB_ACK_NEW;
+                op[i].obs_seq = new_seq;
+              } else {
+                op[i].state = EXO_REQUEST_SUB_ACK;
+              }
+            }
+          } else if (coap_get_code_class(&pdu) != 2) {
+            op[i].state = EXO_REQUEST_ERROR;
           }
           break;
         }
