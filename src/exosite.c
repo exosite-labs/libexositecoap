@@ -262,7 +262,7 @@ exo_state exo_operate(exo_op *op, uint8_t count)
       return EXO_ERROR;
     case EXO_STATE_INITIALIZED:
     case EXO_STATE_BAD_CIK:
-      if (op[0].state == EXO_REQUEST_NULL && op[0].timeout == 0)
+      if (op[0].state == EXO_REQUEST_NULL || op[0].timeout < exopal_get_time())
         exo_activate(&op[0]);
     case EXO_STATE_GOOD:
       break;
@@ -385,7 +385,10 @@ static void exo_process_waiting_datagrams(exo_op *op, uint8_t count)
             op[i].state = EXO_REQUEST_ERROR;
 
             if (coap_get_code(&pdu) == CC_UNAUTHORIZED){
-              device_state = EXO_STATE_BAD_CIK;
+              //device_state = EXO_STATE_BAD_CIK;
+
+              if (op[0].type == EXO_NULL || op[0].timeout < exopal_get_time())
+                exo_activate(&op[0]);
             } else if (coap_get_code(&pdu) == CC_NOT_FOUND) {
               device_state = EXO_STATE_GOOD;
             }
