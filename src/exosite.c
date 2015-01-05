@@ -197,6 +197,8 @@ void exo_op_init(exo_op *op)
   op->value_max = 0;
   op->mid = 0;
   op->obs_seq = 0;
+  op->tkl = 0;
+  op->token = 0;
   op->timeout = 0;
 }
 
