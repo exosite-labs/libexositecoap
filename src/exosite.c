@@ -295,6 +295,7 @@ static void exo_process_waiting_datagrams(exo_op *op, uint8_t count)
 {
   uint8_t buf[MINIMUM_DATAGRAM_SIZE];
   coap_pdu pdu;
+  coap_option opt;
   coap_payload payload;
   int i;
 
@@ -311,7 +312,6 @@ static void exo_process_waiting_datagrams(exo_op *op, uint8_t count)
       if (coap_get_type(&pdu) == CT_CON || coap_get_type(&pdu) == CT_NON) {
         if (op[i].state == EXO_REQUEST_SUBSCRIBED && coap_get_token(&pdu) == op[i].token) {
           if (coap_get_code(&pdu) == CC_CONTENT) {
-            coap_option opt;
             uint32_t new_seq = 0;
             opt = coap_get_option_by_num(&pdu, CON_OBSERVE, 0);
             for (int j = 0; j < opt.len; j++) {
@@ -334,6 +334,16 @@ static void exo_process_waiting_datagrams(exo_op *op, uint8_t count)
               } else {
                 op[i].state = EXO_REQUEST_SUB_ACK;
               }
+
+              opt = coap_get_option_by_num(&pdu, CON_MAX_AGE, 0);
+              uint8_t max_age = 120; // default, 2 minutes, see RFC4787 Sec 4.3
+              if (opt.num !=0 && opt.len == 1){ // if has Max-Age option, use it
+                max_age = opt.val[0];
+              }
+
+              // Set timeout between Max-Age to Max-Age + ACK_RANDOM_FACTOR (CoAP Defined)
+              op[i].timeout = exopal_get_time() + (max_age * 1000000)
+                                                + (((uint64_t)rand() % 1500000));
             }
           } else if (coap_get_code_class(&pdu) != 2) {
             op[i].state = EXO_REQUEST_ERROR;
@@ -369,7 +379,16 @@ static void exo_process_waiting_datagrams(exo_op *op, uint8_t count)
                   memcpy(op[i].value, payload.val, payload.len);
                   op[i].value[payload.len] = 0;
                   op[i].state = EXO_REQUEST_SUCCESS;
-                  op[i].timeout = exopal_get_time() + 120000000 + (rand() % 15 * 100000);
+
+                  opt = coap_get_option_by_num(&pdu, CON_MAX_AGE, 0);
+                  uint8_t max_age = 120; // default, 2 minutes, see RFC4787 Sec 4.3
+                  if (opt.num !=0 && opt.len == 1){ // if has Max-Age option, use it
+                    max_age = opt.val[0];
+                  }
+
+                  // Set timeout between Max-Age to Max-Age + ACK_RANDOM_FACTOR (CoAP Defined)
+                  op[i].timeout = exopal_get_time() + (max_age * 1000000)
+                                                    + (((uint64_t)rand() % 1500000));
                 }
                 break;
               case EXO_ACTIVATE:
@@ -502,9 +521,6 @@ static void exo_process_active_ops(exo_op *op, uint8_t count)
             op[i].state = EXO_REQUEST_SUBSCRIBED;
           else if (op[i].state == EXO_REQUEST_SUB_ACK_NEW)
             op[i].state = EXO_REQUEST_SUCCESS;
-
-          // TODO: this should get set to Max-Age value, hard coding 120 s
-          op[i].timeout = exopal_get_time() + 120000000 + (rand() % 15 * 100000);
         }
         break;
       default:
