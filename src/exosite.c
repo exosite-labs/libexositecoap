@@ -62,6 +62,9 @@ static const char *serial;
 static uint16_t message_id_counter;
 static exo_device_state device_state = EXO_STATE_UNINITIALIZED;
 
+// Internal Constants
+static const int MINIMUM_DATAGRAM_SIZE = 576; // RFC791: all hosts must accept minimum of 576 octets
+
 /*!
  * \brief  Initializes the Exosite library
  *
@@ -290,13 +293,13 @@ exo_state exo_operate(exo_op *op, uint8_t count)
 
 static void exo_process_waiting_datagrams(exo_op *op, uint8_t count)
 {
-  uint8_t buf[576];
+  uint8_t buf[MINIMUM_DATAGRAM_SIZE];
   coap_pdu pdu;
   coap_payload payload;
   int i;
 
   pdu.buf = buf;
-  pdu.max = 576;
+  pdu.max = MINIMUM_DATAGRAM_SIZE;
   pdu.len = 0;
 
   // receive a UDP packet if one or more waiting
@@ -431,13 +434,13 @@ static void exo_process_waiting_datagrams(exo_op *op, uint8_t count)
 // process all ops that are in an active state
 static void exo_process_active_ops(exo_op *op, uint8_t count)
 {
-  uint8_t buf[576];
+  uint8_t buf[MINIMUM_DATAGRAM_SIZE];
   coap_pdu pdu;
   int i;
   uint64_t now = exopal_get_time();
 
   pdu.buf = buf;
-  pdu.max = 576;
+  pdu.max = MINIMUM_DATAGRAM_SIZE;
   pdu.len = 0;
 
   for (i = 0; i < count; i++) {
