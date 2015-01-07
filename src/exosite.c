@@ -43,6 +43,9 @@
 #include <ctype.h>
 
 // Internal Functions
+
+static void exo_process_waiting_datagrams(exo_op *op, uint8_t count);
+static void exo_process_active_ops(exo_op *op, uint8_t count);
 exo_error exo_build_msg_activate(coap_pdu *pdu, const char *vendor, const char *model, const char *serial_number);
 exo_error exo_build_msg_read(coap_pdu *pdu, const char *alias);
 exo_error exo_build_msg_observe(coap_pdu *pdu, const char *alias);
@@ -58,6 +61,9 @@ static const char *model;
 static const char *serial;
 static uint16_t message_id_counter;
 static exo_device_state device_state = EXO_STATE_UNINITIALIZED;
+
+// Internal Constants
+static const int MINIMUM_DATAGRAM_SIZE = 576; // RFC791: all hosts must accept minimum of 576 octets
 
 /*!
  * \brief  Initializes the Exosite library
@@ -194,6 +200,9 @@ void exo_op_init(exo_op *op)
   op->value_max = 0;
   op->mid = 0;
   op->obs_seq = 0;
+  op->tkl = 0;
+  op->token = 0;
+  op->timeout = 0;
 }
 
 void exo_op_done(exo_op *op)
@@ -251,26 +260,48 @@ uint8_t exo_is_op_write(exo_op *op)
  */
 exo_state exo_operate(exo_op *op, uint8_t count)
 {
-  uint8_t buf[576];
-  coap_pdu pdu;
-  coap_payload payload;
   int i;
-  uint64_t now = exopal_get_time();
-
-  pdu.buf = buf;
-  pdu.max = 576;
-  pdu.len = 0;
 
   switch (device_state){
     case EXO_STATE_UNINITIALIZED:
       return EXO_ERROR;
     case EXO_STATE_INITIALIZED:
     case EXO_STATE_BAD_CIK:
-      if (op[0].state == EXO_REQUEST_NULL && op[0].timeout < now)
+      if (op[0].state == EXO_REQUEST_NULL || op[0].timeout < exopal_get_time())
         exo_activate(&op[0]);
     case EXO_STATE_GOOD:
       break;
   }
+
+  exo_process_waiting_datagrams(op, count);
+  exo_process_active_ops(op, count);
+
+  for (i = 0; i < count; i++) {
+    if (op[i].state == EXO_REQUEST_NEW)
+      return EXO_BUSY;
+  }
+
+  for (i = 0; i < count; i++) {
+    if (op[i].state == EXO_REQUEST_PENDING)
+      return EXO_WAITING;
+  }
+
+  return EXO_IDLE;
+}
+
+// Internal Functions
+
+static void exo_process_waiting_datagrams(exo_op *op, uint8_t count)
+{
+  uint8_t buf[MINIMUM_DATAGRAM_SIZE];
+  coap_pdu pdu;
+  coap_option opt;
+  coap_payload payload;
+  int i;
+
+  pdu.buf = buf;
+  pdu.max = MINIMUM_DATAGRAM_SIZE;
+  pdu.len = 0;
 
   // receive a UDP packet if one or more waiting
   while (exopal_udp_recv(pdu.buf, pdu.max, &pdu.len) == 0) {
@@ -278,91 +309,137 @@ exo_state exo_operate(exo_op *op, uint8_t count)
       continue; //Invalid Packet, Ignore
 
     for (i = 0; i < count; i++) {
-      if (op[i].state == EXO_REQUEST_PENDING && op[i].mid == coap_get_mid(&pdu)) {
-        //have a reply to a message, process
-        if (coap_get_code_class(&pdu) == 2) {
-          payload = coap_get_payload(&pdu);
-          switch(op[i].type){
-            case EXO_READ:
-              if (payload.len == 0) {
-                op[i].value = 0;
-              } else if (payload.len+1 > op[i].value_max || op[i].value == 0) {
-                op[i].state = EXO_REQUEST_ERROR;
-              } else{
-                memcpy(op[i].value, payload.val, payload.len);
-                op[i].value[payload.len] = 0;
-                op[i].state = EXO_REQUEST_SUCCESS;
-              }
-              break;
-            case EXO_SUBSCRIBE:
-              if (payload.len == 0) {
-                op[i].value = 0;
-              } else if (payload.len+1 > op[i].value_max || op[i].value == 0) {
-                op[i].state = EXO_REQUEST_ERROR;
-              } else{
-                memcpy(op[i].value, payload.val, payload.len);
-                op[i].value[payload.len] = 0;
-                op[i].state = EXO_REQUEST_SUCCESS;
-                op[i].timeout = exopal_get_time() + 120000000 + (rand() % 15 * 100000);
-              }
-              break;
-            case EXO_WRITE:
-              op[i].state = EXO_REQUEST_SUCCESS;
-              break;
-            case EXO_ACTIVATE:
-              if (payload.len == CIK_LENGTH) {
-                memcpy(cik, payload.val, CIK_LENGTH);
-                cik[CIK_LENGTH] = 0;
-                op[i].state = EXO_REQUEST_SUCCESS;
-                exopal_store_cik(cik);
-                device_state = EXO_STATE_GOOD;
+      if (coap_get_type(&pdu) == CT_CON || coap_get_type(&pdu) == CT_NON) {
+        if (op[i].state == EXO_REQUEST_SUBSCRIBED && coap_get_token(&pdu) == op[i].token) {
+          if (coap_get_code(&pdu) == CC_CONTENT) {
+            uint32_t new_seq = 0;
+            opt = coap_get_option_by_num(&pdu, CON_OBSERVE, 0);
+            for (int j = 0; j < opt.len; j++) {
+              new_seq = (new_seq << (8*j)) | opt.val[j];
+            }
+
+            payload = coap_get_payload(&pdu);
+            if (payload.len == 0) {
+              op[i].value[0] = '\0';
+            } else if (payload.len+1 > op[i].value_max || op[i].value == 0) {
+              op[i].state = EXO_REQUEST_ERROR;
+            } else{
+              memcpy(op[i].value, payload.val, payload.len);
+              op[i].value[payload.len] = 0;
+              op[i].mid = coap_get_mid(&pdu);
+              // TODO: User proper logic to ensure it's a new value not a different, but old one.
+              if (op[i].obs_seq != new_seq) {
+                op[i].state = EXO_REQUEST_SUB_ACK_NEW;
+                op[i].obs_seq = new_seq;
               } else {
-                op[i].state = EXO_REQUEST_ERROR;
+                op[i].state = EXO_REQUEST_SUB_ACK;
               }
-              break;
-              break;
-            default:
-              break;
-          }
-          device_state = EXO_STATE_GOOD;
-        } else {
-          op[i].state = EXO_REQUEST_ERROR;
-          if (coap_get_code(&pdu) == CC_UNAUTHORIZED){
-            device_state = EXO_STATE_BAD_CIK;
-            op[i].timeout = now + 10000000;
-          }
-        }
-        break;
-      }else if (op[i].state == EXO_REQUEST_SUBSCRIBED && coap_get_token(&pdu) == op[i].token) {
 
-        coap_option opt;
-        uint32_t new_seq = 0;
-        opt = coap_get_option_by_num(&pdu, CON_OBSERVE, 0);
-        for (int j = 0; j < opt.len; j++) {
-          new_seq = (new_seq << (8*j)) | opt.val[j];
-        }
+              opt = coap_get_option_by_num(&pdu, CON_MAX_AGE, 0);
+              uint8_t max_age = 120; // default, 2 minutes, see RFC4787 Sec 4.3
+              if (opt.num !=0 && opt.len == 1){ // if has Max-Age option, use it
+                max_age = opt.val[0];
+              }
 
-        payload = coap_get_payload(&pdu);
-        if (payload.len == 0) {
-          op[i].value = 0;
-        } else if (payload.len+1 > op[i].value_max || op[i].value == 0) {
-          op[i].state = EXO_REQUEST_ERROR;
-        } else{
-          memcpy(op[i].value, payload.val, payload.len);
-          op[i].value[payload.len] = 0;
-          op[i].mid = coap_get_mid(&pdu);
-          // TODO: User proper logic to ensure it's a new value not a different, but old one.
-          if (op[i].obs_seq != new_seq) {
-            op[i].state = EXO_REQUEST_SUB_ACK_NEW;
-            op[i].obs_seq = new_seq;
+              // Set timeout between Max-Age to Max-Age + ACK_RANDOM_FACTOR (CoAP Defined)
+              op[i].timeout = exopal_get_time() + (max_age * 1000000)
+                                                + (((uint64_t)rand() % 1500000));
+            }
+          } else if (coap_get_code_class(&pdu) != 2) {
+            op[i].state = EXO_REQUEST_ERROR;
+          }
+          break;
+        }
+      } else if (coap_get_type(&pdu) == CT_ACK) {
+        if (op[i].state == EXO_REQUEST_PENDING && op[i].mid == coap_get_mid(&pdu)) {
+          if (coap_get_code_class(&pdu) == 2) {
+            switch (op[i].type) {
+              case EXO_WRITE:
+                op[i].state = EXO_REQUEST_SUCCESS;
+                break;
+              case EXO_READ:
+                payload = coap_get_payload(&pdu);
+                if (payload.len == 0) {
+                  op[i].value[0] = '\0';
+                } else if (payload.len+1 > op[i].value_max || op[i].value == 0) {
+                  op[i].state = EXO_REQUEST_ERROR;
+                } else{
+                  memcpy(op[i].value, payload.val, payload.len);
+                  op[i].value[payload.len] = 0;
+                  op[i].state = EXO_REQUEST_SUCCESS;
+                }
+                break;
+              case EXO_SUBSCRIBE:
+                payload = coap_get_payload(&pdu);
+                if (payload.len == 0) {
+                  op[i].value[0] = '\0';
+                } else if (payload.len+1 > op[i].value_max || op[i].value == 0) {
+                  op[i].state = EXO_REQUEST_ERROR;
+                } else{
+                  memcpy(op[i].value, payload.val, payload.len);
+                  op[i].value[payload.len] = 0;
+                  op[i].state = EXO_REQUEST_SUCCESS;
+
+                  opt = coap_get_option_by_num(&pdu, CON_MAX_AGE, 0);
+                  uint8_t max_age = 120; // default, 2 minutes, see RFC4787 Sec 4.3
+                  if (opt.num !=0 && opt.len == 1){ // if has Max-Age option, use it
+                    max_age = opt.val[0];
+                  }
+
+                  opt = coap_get_option_by_num(&pdu, CON_OBSERVE, 0);
+                  for (int j = 0; j < opt.len; j++) {
+                    op[i].obs_seq = (op[i].obs_seq << (8*j)) | opt.val[j];
+                  }
+
+                  // Set timeout between Max-Age to Max-Age + ACK_RANDOM_FACTOR (CoAP Defined)
+                  op[i].timeout = exopal_get_time() + (max_age * 1000000)
+                                                    + (((uint64_t)rand() % 1500000));
+                }
+                break;
+              case EXO_ACTIVATE:
+                payload = coap_get_payload(&pdu);
+                if (payload.len == CIK_LENGTH) {
+                  memcpy(cik, payload.val, CIK_LENGTH);
+                  cik[CIK_LENGTH] = 0;
+                  op[i].state = EXO_REQUEST_SUCCESS;
+                  exopal_store_cik(cik);
+                  device_state = EXO_STATE_GOOD;
+                } else {
+                  op[i].state = EXO_REQUEST_ERROR;
+                }
+
+                // We're done with this op now.
+                exo_op_init(&op[i]);
+                break;
+              case EXO_NULL: // pending null request? shouldn't be possible
+                continue;
+            }
           } else {
-            op[i].state = EXO_REQUEST_SUB_ACK;
+            op[i].state = EXO_REQUEST_ERROR;
+
+            if (coap_get_code(&pdu) == CC_UNAUTHORIZED){
+              //device_state = EXO_STATE_BAD_CIK;
+
+              if (op[0].type == EXO_NULL || op[0].timeout < exopal_get_time())
+                exo_activate(&op[0]);
+            } else if (coap_get_code(&pdu) == CC_NOT_FOUND) {
+              device_state = EXO_STATE_GOOD;
+            }
           }
+
+          break;
         }
-        break;
+
+      } else if (coap_get_type(&pdu) == CT_RST) {
+        if ((op[i].state == EXO_REQUEST_PENDING || op[i].state == EXO_REQUEST_SUBSCRIBED) &&
+            (op[i].mid == coap_get_mid(&pdu) && op[i].token == coap_get_token(&pdu))){
+          op[i].state = EXO_REQUEST_ERROR;
+          break;
+        }
       }
     }
 
+    // if the above loop ends normally we don't recognize message, reply RST
     if (i == count){
       if (coap_get_type(&pdu) == CT_CON) {
         // this can't fail
@@ -376,8 +453,20 @@ exo_state exo_operate(exo_op *op, uint8_t count)
       break;
     }
   }
+}
 
-  // process all requests that need something done
+// process all ops that are in an active state
+static void exo_process_active_ops(exo_op *op, uint8_t count)
+{
+  uint8_t buf[MINIMUM_DATAGRAM_SIZE];
+  coap_pdu pdu;
+  int i;
+  uint64_t now = exopal_get_time();
+
+  pdu.buf = buf;
+  pdu.max = MINIMUM_DATAGRAM_SIZE;
+  pdu.len = 0;
+
   for (i = 0; i < count; i++) {
     switch (op[i].state) {
       case EXO_REQUEST_NEW:
@@ -437,30 +526,14 @@ exo_state exo_operate(exo_op *op, uint8_t count)
             op[i].state = EXO_REQUEST_SUBSCRIBED;
           else if (op[i].state == EXO_REQUEST_SUB_ACK_NEW)
             op[i].state = EXO_REQUEST_SUCCESS;
-
-          // TODO: this should get set to Max-Age value, hard coding 120 s
-          op[i].timeout = exopal_get_time() + 120000000 + (rand() % 15 * 100000);
         }
         break;
       default:
         break;
     }
   }
-
-  for (i = 0; i < count; i++) {
-    if (op[i].state == EXO_REQUEST_NEW)
-      return EXO_BUSY;
-  }
-
-  for (i = 0; i < count; i++) {
-    if (op[i].state == EXO_REQUEST_PENDING)
-      return EXO_WAITING;
-  }
-
-  return EXO_IDLE;
 }
 
-// Internal Functions
 
 exo_error exo_build_msg_activate(coap_pdu *pdu, const char *vendor, const char *model, const char *serial_number)
 {
