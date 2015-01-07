@@ -386,6 +386,11 @@ static void exo_process_waiting_datagrams(exo_op *op, uint8_t count)
                     max_age = opt.val[0];
                   }
 
+                  opt = coap_get_option_by_num(&pdu, CON_OBSERVE, 0);
+                  for (int j = 0; j < opt.len; j++) {
+                    op[i].obs_seq = (op[i].obs_seq << (8*j)) | opt.val[j];
+                  }
+
                   // Set timeout between Max-Age to Max-Age + ACK_RANDOM_FACTOR (CoAP Defined)
                   op[i].timeout = exopal_get_time() + (max_age * 1000000)
                                                     + (((uint64_t)rand() % 1500000));
