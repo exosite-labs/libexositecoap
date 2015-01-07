@@ -112,6 +112,7 @@ typedef struct exo_op
 	uint8_t tkl;
 	uint64_t token;
 	uint64_t timeout;
+	uint8_t retries;
 } exo_op;
 
 // PUBLIC FUNCTIONS

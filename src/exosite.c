@@ -203,6 +203,7 @@ void exo_op_init(exo_op *op)
   op->tkl = 0;
   op->token = 0;
   op->timeout = 0;
+  op->retries = 0;
 }
 
 void exo_op_done(exo_op *op)
@@ -504,8 +505,34 @@ static void exo_process_active_ops(exo_op *op, uint8_t count)
           switch (op[i].type) {
             case EXO_READ:
             case EXO_WRITE:
-              // TODO: may want to do some sort of retry system
-              op[i].state = EXO_REQUEST_ERROR;
+            case EXO_ACTIVATE:
+              if (op[i].retries < COAP_MAX_RETRANSMIT){
+                switch (op[i].type) {
+                  case EXO_READ:
+                    exo_build_msg_read(&pdu, op[i].alias);
+                    break;
+                  case EXO_WRITE:
+                    exo_build_msg_write(&pdu, op[i].alias, op[i].value);
+                    break;
+                  case EXO_ACTIVATE:
+                    exo_build_msg_activate(&pdu, vendor, model, serial);
+                    break;
+                  default:
+                    break;
+                }
+
+                // reuse old mid and token
+                coap_set_mid(&pdu, op[i].mid);
+                coap_set_token(&pdu, op[i].token, op[i].tkl);
+
+                if (exopal_udp_send(pdu.buf, pdu.len) == 0) {
+                  op[i].retries++;
+                  op[i].timeout = exopal_get_time() + (op[i].retries * COAP_PROBING_RATE * 1000000)
+                                                    + (((uint64_t)rand() % 1500000));
+                }
+              } else {
+                op[i].state = EXO_REQUEST_ERROR;
+              }
               break;
             case EXO_SUBSCRIBE:
               // force a new observe request
