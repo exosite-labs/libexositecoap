@@ -546,7 +546,7 @@ static void exo_process_active_ops(exo_op *op, uint8_t count)
       case EXO_REQUEST_SUB_ACK_NEW:
       case EXO_REQUEST_SUB_ACK:
         // send ack for observe notification
-        exo_build_msg_ack(&pdu, coap_get_mid(&pdu));
+        exo_build_msg_ack(&pdu, op[i].mid);
 
         if (exopal_udp_send(pdu.buf, pdu.len) == 0) {
           if (op[i].state == EXO_REQUEST_SUB_ACK)
