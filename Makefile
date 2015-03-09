@@ -29,25 +29,6 @@ testframework:
 	cmake -DCMAKE_INSTALL_PREFIX=/usr -DCMAKE_BUILD_TYPE=Debug .. && \
 	make
 
-buildtest: tests/test.c src/exosite.h
-	$(CC) $(OPT) tests/test.c \
-	             src/exosite.c \
-	             pal/template/exosite_pal.c \
-	    -Ipal/template \
-	    -Ipicocoap/src \
-	    -o test
-
-posixclient: 
-	$(CC) $(OPT) examples/polling_read_write.c \
-	             src/exosite.c \
-	             pal/posix/exosite_pal.c \
-	             picocoap/picocoap.o \
-	    -D_POSIX_C_SOURCE=200112L \
-	    -Isrc \
-	    -Ipal/posix \
-	    -Ipicocoap/src \
-	    -o posixclient
-
 posixsubscribe: picocoap
 	$(CC) $(OPT) examples/subscribe.c \
 	             src/exosite.c \
