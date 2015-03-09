@@ -14,14 +14,20 @@ release: src/exosite.c
 debug: src/exosite.c
 	$(CC) $(OPT) -c src/exosite.c -o exosite.o
 
-test: tests/test.c 
+test: tests/test.c testframework
 	$(CC) $(OPT) tests/test.c \
 		     tests/cmocka/build/src/libcmocka.0.dylib \
-		     -Itests/cmocka/include \
-		     -Itests/cmocka/build \
-	    -o test
+		-Itests/cmocka/include \
+		-Itests/cmocka/build \
+		-o test
 	./test
 	rm test
+
+testframework:
+	mkdir -p tests/cmocka/build
+	cd tests/cmocka/build && \
+	cmake -DCMAKE_INSTALL_PREFIX=/usr -DCMAKE_BUILD_TYPE=Debug .. && \
+	make
 
 buildtest: tests/test.c src/exosite.h
 	$(CC) $(OPT) tests/test.c \
