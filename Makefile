@@ -48,7 +48,7 @@ posixclient:
 	    -Ipicocoap/src \
 	    -o posixclient
 
-posixsubscribe: 
+posixsubscribe: picocoap
 	$(CC) $(OPT) examples/subscribe.c \
 	             src/exosite.c \
 	             pal/posix/exosite_pal.c \
@@ -59,6 +59,11 @@ posixsubscribe:
 	    -Ipicocoap/src \
 	    -o posixsubscribe
 
+picocoap:
+	$(MAKE) -C picocoap
+
+.PHONY: picocoap
+
 #posixclientd: examples/posix/client_dtls.c src/coap.h
 #	$(CC) $(OPT) -D_POSIX_SOURCE examples/posix/client_dtls.c src/coap.c -o posixclientd
 
@@ -66,3 +71,4 @@ clean:
 	rm -f test
 	rm -f posixclient
 	rm -f posixsubscribe
+	rm -rf *.dSYM
