@@ -16,7 +16,7 @@ debug: src/exosite.c
 
 test: tests/test.c testframework
 	$(CC) $(OPT) tests/test.c \
-		     tests/cmocka/build/src/libcmocka.0.dylib \
+		     tests/cmocka/build/src/libcmocka.* \
 		-Itests/cmocka/include \
 		-Itests/cmocka/build \
 		-o test
