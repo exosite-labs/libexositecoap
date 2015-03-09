@@ -1,5 +1,8 @@
 docs/html/
 
+cik
+
 *.exe
 *.a
 *.o
+*.dSYM
