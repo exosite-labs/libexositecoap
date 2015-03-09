@@ -14,13 +14,11 @@ release: src/exosite.c
 debug: src/exosite.c
 	$(CC) $(OPT) -c src/exosite.c -o exosite.o
 
-test: tests/test.c src/exosite.h
+test: tests/test.c 
 	$(CC) $(OPT) tests/test.c \
-	             src/exosite.c \
-	             pal/template/exosite_pal.c \
-	             picocoap/picocoap.o \
-	    -Ipal/template \
-	    -Ipicocoap/src \
+		     tests/cmocka/build/src/libcmocka.0.dylib \
+		     -Itests/cmocka/include \
+		     -Itests/cmocka/build \
 	    -o test
 	./test
 	rm test
