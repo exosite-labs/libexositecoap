@@ -45,9 +45,6 @@ picocoap:
 
 .PHONY: picocoap
 
-#posixclientd: examples/posix/client_dtls.c src/coap.h
-#	$(CC) $(OPT) -D_POSIX_SOURCE examples/posix/client_dtls.c src/coap.c -o posixclientd
-
 clean:
 	rm -f test
 	rm -f posixclient
