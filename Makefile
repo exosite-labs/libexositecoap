@@ -14,20 +14,17 @@ release: src/exosite.c
 debug: src/exosite.c
 	$(CC) $(OPT) -c src/exosite.c -o exosite.o
 
-test: tests/test.c testframework
+
+test: tests/test.c
 	$(CC) $(OPT) tests/test.c \
-		     tests/cmocka/build/src/libcmocka.* \
+		     tests/cmocka/src/cmocka.c \
 		-Itests/cmocka/include \
-		-Itests/cmocka/build \
+		-Itests \
+		-D_GNU_SOURCE \
+		-DHAVE_SIGNAL_H \
 		-o test
 	./test
 	rm test
-
-testframework:
-	mkdir -p tests/cmocka/build
-	cd tests/cmocka/build && \
-	cmake -DCMAKE_INSTALL_PREFIX=/usr -DCMAKE_BUILD_TYPE=Debug .. && \
-	make
 
 posixsubscribe: picocoap
 	$(CC) $(OPT) examples/subscribe.c \
