@@ -57,3 +57,10 @@ operations have succeeded or failed and that all of the queued sustained
 sustained operations are in a waiting state and are not expecting any immediate
 responses. This is the time to do any operations that will take more than a
 couple hundred milliseconds.
+
+### When Not Using Provisioning with Examples
+
+If you're planning on testing the included example
+(`make posixsubscribe && ./posixsubscribe`) and you're not using the
+provisioning system you'll need to paste your CIK into a file named `cik` to
+fool the library into thinking that it already activated itself.
