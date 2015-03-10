@@ -40,7 +40,7 @@ posixsubscribe: picocoap
 picocoap:
 	$(MAKE) -C picocoap
 
-.PHONY: picocoap
+.PHONY: picocoap test
 
 clean:
 	rm -f test
