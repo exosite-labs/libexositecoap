@@ -1,5 +1,7 @@
-**NOTICE: This library is not finished, do not depend on it for anything, it
-will have potentially significant bugs.**
+** NOTICE: This library is not finished, while I have been running it very
+successfully on an embedded device for the last month without any issue, there
+are no tests in place and the API is not 100% stabilized. If you are interested
+in using this in production please let us know and we can talk about roadmap. **
 
 # libexositecoap
 
