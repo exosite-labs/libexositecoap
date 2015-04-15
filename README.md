@@ -1,7 +1,9 @@
-** NOTICE: This library is not finished, while I have been running it very
-successfully on an embedded device for the last month without any issue, there
-are no tests in place and the API is not 100% stabilized. If you are interested
-in using this in production please let us know and we can talk about roadmap. **
+**NOTICE: This library is not finished, while I have been running it very
+successfully on an embedded device for the three last months without any issue,
+there are no tests in place and the API is not stabilized. In fact we are
+considering rewriting the whole interface. If you are interested in using this
+library, or if you have strong opinions on what you'd like to see in it, please
+get in contact with us and we can talk about roadmap.**
 
 # libexositecoap
 
