@@ -6,3 +6,8 @@ cik
 *.a
 *.o
 *.dSYM
+
+posixsubscribe
+
+# Crap
+.DS_Store
