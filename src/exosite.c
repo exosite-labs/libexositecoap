@@ -36,11 +36,6 @@
 #include "exosite.h"
 #include "coap.h"
 
-#include <stdlib.h>
-#include <stdbool.h>
-#include <time.h>
-#include <string.h>
-#include <ctype.h>
 
 // Internal Functions
 
@@ -63,7 +58,7 @@ static uint16_t message_id_counter;
 static exo_device_state device_state = EXO_STATE_UNINITIALIZED;
 
 // Internal Constants
-static const int MINIMUM_DATAGRAM_SIZE = 576; // RFC791: all hosts must accept minimum of 576 octets
+#define MINIMUM_DATAGRAM_SIZE 576 // RFC791: all hosts must accept minimum of 576 octets
 
 /*!
  * \brief  Initializes the Exosite library
@@ -80,23 +75,27 @@ exo_error exo_init(const char *vendor_in, const char *model_in, const char *seri
 {
   device_state = EXO_STATE_UNINITIALIZED;
 
+  _io_printf("Exo PAL Init\n");
   if (exopal_init() != 0) {
     return EXO_FATAL_ERROR_PAL;
   }
 
-  srand(time(NULL));
-  message_id_counter = rand();
+  _io_printf("Exo Rand Init\n");
+  //srand(time(NULL));
+  //message_id_counter = rand();
 
   serial = serial_in;
   vendor = vendor_in;
   model = model_in;
 
+  _io_printf("Exo CIK Init\n");
   if (exopal_retrieve_cik(cik) > 1){
     return EXO_FATAL_ERROR_PAL;
   } else {
     cik[40] = 0;
   }
 
+  _io_printf("Exo Sock Init\n");
   if (exopal_udp_sock() != 0) {
     return EXO_FATAL_ERROR_PAL;
   }
@@ -303,6 +302,8 @@ static void exo_process_waiting_datagrams(exo_op *op, uint8_t count)
   pdu.buf = buf;
   pdu.max = MINIMUM_DATAGRAM_SIZE;
   pdu.len = 0;
+
+    //printf("Exosite Init Done");
 
   // receive a UDP packet if one or more waiting
   while (exopal_udp_recv(pdu.buf, pdu.max, &pdu.len) == 0) {
@@ -697,4 +698,75 @@ uint8_t exo_util_is_ascii_hex(const char *str, size_t len)
 
     return 0;
 }
+
+
+void hex_dump(uint8_t* bytes, size_t len)
+{
+  size_t i, j;
+  for (i = 0; i < len; i+=16){
+    _io_printf("  0x%.3zx    ", i);
+    for (j = 0; j < 16; j++){
+      if (i+j < len)
+        _io_printf("%02hhx ", bytes[i+j]);
+      else
+        _io_printf("%s ", "--");
+    }
+    _io_printf("   %.*s\n", (int)(16 > len-i ? len-i : 16), bytes+i);
+  }
+}
+
+/*
+v:1 t:CON c:GET  i:55 t:0F3A [Uri-Path:'.well-known':'core']
+v:1 t:CON c:POST i:37 t:C345 [Uri-Path:'led'] :: 'on'
+v:1 t:CON c:POST i:42 t:45FF [Uri-Path:'binarything'
+Content-Format:application/octet-stream] :: <<FF432A>>
+v:1 t:CON c:0.07 i:F1 t:C345 [76:0]
+
+or 
+
+C1: CON-F345 GET {0F3A} [Uri-Path:'.well-known':'core']
+C1: ACK-A4C3 Content {B6} [] :: 'hello, world'
+*/
+
+
+void coap_pretty_print(coap_pdu *pdu)
+{
+  coap_option opt;
+
+  opt.num = 0;
+  uint16_t last_num = 0;
+
+  if (coap_validate_pkt(pdu) == CE_NONE){
+      _io_printf("%i-%04X ",coap_get_type(pdu), coap_get_mid(pdu));
+      _io_printf("%i.%02i ", coap_get_code_class(pdu), coap_get_code_detail(pdu));
+      _io_printf("{0x%llX} [", coap_get_token(pdu));
+
+      while ((opt = coap_get_option(pdu, &opt)).num != 0){
+        if (opt.num == 0)
+          break;
+
+        if(last_num == 0){
+          _io_printf("%i:", opt.num);
+        } else if(opt.num != last_num){
+          _io_printf(" %i:", opt.num);
+        } else {
+          _io_printf(":", opt.num);
+        }
+        _io_printf("'%.*s'", (int)opt.len, opt.val, opt.len);
+
+        last_num = opt.num;
+      }
+
+      _io_printf("] ");
+ 
+      // Note: get_option returns payload pointer when it finds the payload marker
+      if (opt.val != NULL && opt.len != 0)
+        _io_printf("Payload: %.*s (%i)\n", (int)opt.len, opt.val, opt.len);
+
+      _io_printf("\n");
+    } else {
+      hex_dump(pdu->buf, pdu->len);
+    }
+}
+
 

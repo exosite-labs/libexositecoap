@@ -102,16 +102,16 @@ typedef enum exo_request_state
 
 typedef struct exo_op
 {
-	exo_request_type type;
-	exo_request_state state;
-	const char * alias;
-	char * value;
-	size_t value_max;
-	uint16_t mid;
-	uint32_t obs_seq;
-	uint8_t tkl;
 	uint64_t token;
 	uint64_t timeout;
+	size_t value_max;
+	uint32_t obs_seq;
+	const char * alias;
+	char * value;
+	exo_request_type type;
+	exo_request_state state;
+	uint16_t mid;
+	uint8_t tkl;
 	uint8_t retries;
 } exo_op;
 
